@@ -1,8 +1,8 @@
-// src/TaskForm.js
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import axios from "axios";
 
 function TaskForm() {
-  // State to store form input
+  // Form state
   const [task, setTask] = useState({
     title: "",
     description: "",
@@ -10,44 +10,68 @@ function TaskForm() {
     dueDate: "",
   });
 
-  // State to store confirmation response
+  // Confirmation state
   const [confirmation, setConfirmation] = useState(null);
 
-  // Handle input changes
+  // Tasks loaded from backend
+  const [tasksFromDB, setTasksFromDB] = useState([]);
+
+  // Get tasks when component loads
+  useEffect(() => {
+    axios
+      .get("http://localhost:5000/tasks")
+      .then((res) => {
+        // Backend might return {tasks: []} or []
+        setTasksFromDB(res.data.tasks || res.data);
+      })
+      .catch(() => {
+        console.log("Error fetching tasks");
+      });
+  }, []);
+
+  // Input handler
   const handleChange = (e) => {
     const { name, value } = e.target;
     setTask((prev) => ({ ...prev, [name]: value }));
   };
 
-  // Handle form submit
+  // Submit handler (POST)
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     try {
-      const res = await fetch("http://localhost:5000/tasks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(task),
+      const res = await axios.post("http://localhost:5000/tasks", task);
+
+      setConfirmation(res.data);
+
+      // Reset form
+      setTask({
+        title: "",
+        description: "",
+        status: "Pending",
+        dueDate: "",
       });
 
-      const data = await res.json();
+      // Refresh task list
+      const updated = await axios.get("http://localhost:5000/tasks");
+      setTasksFromDB(updated.data.tasks || updated.data);
 
-      if (res.ok) {
-        setConfirmation(data); // display success
-        // Reset form
-        setTask({ title: "", description: "", status: "Pending", dueDate: "" });
-      } else {
-        setConfirmation({ message: data.error });
-      }
     } catch (err) {
-      setConfirmation({ message: "Network error" });
+      setConfirmation({
+        message: err.response?.data?.error || "Network error",
+      });
     }
   };
 
   return (
-    <div style={{ padding: "20px", maxWidth: "500px", margin: "auto" }}>
+    <div style={{ padding: "20px", maxWidth: "600px", margin: "auto" }}>
       <h2>Create New Task</h2>
-      <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+
+      {/* Form */}
+      <form
+        onSubmit={handleSubmit}
+        style={{ display: "flex", flexDirection: "column", gap: "10px" }}
+      >
         <input
           type="text"
           name="title"
@@ -64,7 +88,12 @@ function TaskForm() {
           onChange={handleChange}
         />
 
-        <select name="status" value={task.status} onChange={handleChange} required>
+        <select
+          name="status"
+          value={task.status}
+          onChange={handleChange}
+          required
+        >
           <option value="Pending">Pending</option>
           <option value="In Progress">In Progress</option>
           <option value="Completed">Completed</option>
@@ -81,19 +110,50 @@ function TaskForm() {
         <button type="submit">Create Task</button>
       </form>
 
+      {/* Confirmation */}
       {confirmation && (
-        <div style={{ marginTop: "20px", padding: "10px", border: "1px solid green" }}>
+        <div
+          style={{
+            marginTop: "20px",
+            padding: "10px",
+            border: "1px solid green",
+          }}
+        >
           <h3>{confirmation.message}</h3>
           {confirmation.task && (
             <div>
-              <p><strong>Title:</strong> {confirmation.task.title}</p>
-              <p><strong>Description:</strong> {confirmation.task.description}</p>
-              <p><strong>Status:</strong> {confirmation.task.status}</p>
-              <p><strong>Due:</strong> {new Date(confirmation.task.dueDate).toLocaleString()}</p>
+              <p>
+                <strong>Title:</strong> {confirmation.task.title}
+              </p>
+              <p>
+                <strong>Description:</strong> {confirmation.task.description}
+              </p>
+              <p>
+                <strong>Status:</strong> {confirmation.task.status}
+              </p>
+              <p>
+                <strong>Due:</strong>{" "}
+                {new Date(confirmation.task.dueDate).toLocaleString()}
+              </p>
             </div>
           )}
         </div>
       )}
+
+      {/* Display tasks from DB */}
+      <h3 style={{ marginTop: "30px" }}>Existing Tasks</h3>
+      <ul>
+        {tasksFromDB.map((t) => (
+          <li key={t._id} style={{ marginBottom: "15px" }}>
+            <strong>{t.title}</strong> — {t.status}
+            <br />
+            Due: {new Date(t.dueDate).toLocaleString()}
+            <br />
+            {t.description}
+            <hr />
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
